@@ -1,5 +1,5 @@
 // ===== Charlotte, NC proportional symbol map (OSM basemap) =====
-// Controls: drag = pan | mouse wheel = zoom | arrow keys = move | R = reset
+// Controls: drag = pan | mouse wheel = zoom | arrow keys = move | R = reset | B = print boundary
 
 // ---- Variables that move the city on the canvas ----
 let cityX = 400;       // canvas x where the map centre sits
@@ -15,16 +15,18 @@ const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 // const TILE_URL = "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png";
 let tiles = {};
 
-// ---- Charlotte boundary (approximate [lon, lat]) ----
-const boundary = [
+// ---- Charlotte boundary: approximate fallback, replaced by the real OSM outline if it downloads ----
+let boundary = [
   [-80.93, 35.37], [-80.85, 35.40], [-80.76, 35.38], [-80.70, 35.34],
   [-80.66, 35.30], [-80.64, 35.23], [-80.66, 35.17], [-80.70, 35.12],
   [-80.72, 35.06], [-80.76, 35.01], [-80.83, 35.00], [-80.89, 35.03],
   [-80.96, 35.06], [-81.00, 35.11], [-80.99, 35.17], [-80.97, 35.23],
   [-80.97, 35.30]
 ];
+let BOUNDARY_CACHE = [];   // optional: press B after it loads, paste the console output here
+let boundaryStatus = "Boundary: loading...";
 
-// ---- Main roads (hand-approximated, so they may sit slightly off the tile roads) ----
+// ---- Main roads (your traced coordinates) ----
 const roads = [
   { name: "I-485", color: [200, 40, 40], closed: true, labelAt: 10, pts: [[-80.9686128,35.2148489],[-80.9693549,35.173821],[-80.9677996,35.1687357],[-80.9618378,35.1643917],[-80.9517286,35.1620608],[-80.9494165,35.1597203],[-80.9465652,35.1527267],[-80.9443619,35.1495477],[-80.9297166,35.1403276],[-80.9277725,35.1385259],[-80.9215515,35.1283506],[-80.9133864,35.1230504],[-80.9078134,35.1212483],[-80.9042973,35.1185981],[-80.8943178,35.1075721],[-80.8809685,35.1013163],[-80.8777284,35.0986895],[-80.8755251,35.0942358],[-80.872285,35.077161],[-80.8689152,35.0709029],[-80.8591949,35.0658112],[-80.8404022,35.0651747],[-80.8330147,35.0645382],[-80.8291266,35.0639017],[-80.8279601,35.0637956],[-80.8112924,35.0641139],[-80.800924,35.0634774],[-80.76943,35.0598705],[-80.7555623,35.0632652],[-80.7466196,35.0715393],[-80.7428461,35.0781156],[-80.7363658,35.0847974],[-80.7112225,35.1014465],[-80.6841351,35.1118372],[-80.6726415,35.1135599],[-80.6643468,35.1185426],[-80.6456837,35.1378345],[-80.6307791,35.1452727],[-80.6297423,35.1494057],[-80.6293535,35.1959495],[-80.6327232,35.2015626],[-80.6439988,35.2125241],[-80.6538488,35.2262886],[-80.6544968,35.2313702],[-80.652812,35.2357106],[-80.649183,35.2432754],[-80.6499607,35.2484619],[-80.6543672,35.2528013],[-80.6651244,35.2599979],[-80.6694014,35.265924],[-80.6710862,35.27058],[-80.6721231,35.2773518],[-80.6867684,35.3031334],[-80.6896197,35.3050372],[-80.7047835,35.3099024],[-80.708055,35.3126308],[-80.720497,35.3328282],[-80.7417522,35.3580509],[-80.7656568,35.3681974],[-80.7932626,35.3691486],[-80.8086856,35.3671405],[-80.8519975,35.3621731],[-80.8553672,35.3603762],[-80.8692349,35.347586],[-80.8803809,35.3442031],[-80.8883019,35.3398685],[-80.8925789,35.3393399],[-80.9016512,35.34008],[-80.9061874,35.3385999],[-80.9127972,35.3319389],[-80.9189492,35.3297185],[-80.9267254,35.3284496],[-80.9386491,35.323374],[-80.9435741,35.3190384],[-80.9531648,35.3074873],[-80.9547201,35.3050546],[-80.9580898,35.29691],[-80.9637924,35.2906688],[-80.9654773,35.2858024],[-80.9657365,35.2778675],[-80.9702726,35.2346643],[-80.9711799,35.2258813],[-80.9685878,35.2149758],[-80.9685878,35.214764]] },
   { name: "I-77", color: [230, 120, 20], closed: false, labelAt: 1, pts: [ [-80.9652965,35.0279689],[-80.9609555,35.0347253],[-80.9578524,35.0565622],[-80.9550847,35.0628781],[-80.9331848,35.0924871],[-80.9313415,35.1028856],[-80.9110646,35.1348039],[-80.8945715,35.1501154],[-80.8861309,35.1763049],[-80.8880713,35.1843371],[-80.8879743,35.1868744],[-80.8802128,35.2032067],[-80.8726453,35.2147729],[-80.8714811,35.2186567],[-80.8608091,35.2283258],[-80.8583836,35.2336354],[-80.855085,35.2368844],[-80.8475176,35.2440159],[-80.8408233,35.2594653],[-80.8406293,35.2611921],[-80.8451891,35.2679254],[-80.8452862,35.269272],[-80.8440249,35.2739453],[-80.8505252,35.288993],[-80.8514128,35.2925896],[-80.8473946,35.3113433],[-80.8489014,35.3413606],[-80.8477713,35.3490652],[-80.8426229,35.360433],[-80.8426229,35.367601],[-80.8487758,35.3792498],[-80.8499059,35.3829355],[-80.8501571,35.3883612],[-80.855431,35.3974716],[-80.8571889,35.4054041],[-80.8588213,35.4138985]] },
@@ -46,12 +48,69 @@ const CLUSTER_CELL = 55;
 
 function setup() {
   createCanvas(800, 600);
+  startData();
+}
+
+// loads the boundary first, then makes the dots inside it
+async function startData() {
+  await loadBoundary();
+  makePoints();
+}
+
+function makePoints() {
   randomSeed(7);
-  while (points.length < NUM_POINTS) {
-    let lon = random(-81.0, -80.64);
-    let lat = random(35.0, 35.40);
+  points = [];
+  let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+  for (let p of boundary) {
+    minLon = min(minLon, p[0]); maxLon = max(maxLon, p[0]);
+    minLat = min(minLat, p[1]); maxLat = max(maxLat, p[1]);
+  }
+  let tries = 0;
+  while (points.length < NUM_POINTS && tries < 20000) {
+    tries++;
+    let lon = random(minLon, maxLon);
+    let lat = random(minLat, maxLat);
     if (insideBoundary(lon, lat)) points.push({ lon: lon, lat: lat });
   }
+}
+
+// ---------- Real city boundary from OpenStreetMap (Nominatim) ----------
+async function loadBoundary() {
+  if (BOUNDARY_CACHE.length > 2) {
+    boundary = BOUNDARY_CACHE;
+    boundaryStatus = "Boundary: saved data";
+    return;
+  }
+  const url = "https://nominatim.openstreetmap.org/search?city=Charlotte" +
+              "&state=North%20Carolina&country=US&featuretype=city" +
+              "&polygon_geojson=1&format=jsonv2&limit=1";
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (!data.length || !data[0].geojson) throw new Error("no polygon returned");
+    let g = data[0].geojson;
+    let rings;
+    if (g.type === "Polygon") rings = [g.coordinates[0]];
+    else if (g.type === "MultiPolygon") rings = g.coordinates.map(p => p[0]);
+    else throw new Error("result was " + g.type + ", not a polygon");
+    let best = rings.reduce((a, b) => (b.length > a.length ? b : a));
+    boundary = thinRing(best, 0.003);   // raise to 0.01 for a simpler shape
+    boundaryStatus = "Boundary: OpenStreetMap (" + boundary.length + " points)";
+  } catch (err) {
+    console.log("Boundary download failed:", err.message);
+    boundaryStatus = "Boundary: download failed, using approximate shape";
+  }
+}
+
+// keeps a point only if it is at least minDist degrees from the last kept point
+function thinRing(ring, minDist) {
+  let out = [ring[0]];
+  for (let i = 1; i < ring.length; i++) {
+    let last = out[out.length - 1];
+    if (dist(ring[i][0], ring[i][1], last[0], last[1]) >= minDist) out.push(ring[i]);
+  }
+  return out.map(p => [p[0], p[1]]);
 }
 
 function draw() {
@@ -82,8 +141,8 @@ function merc(lon, lat) {
 function toScreen(lon, lat) {
   let m = merc(lon, lat);
   let c = merc(CENTER_LON, CENTER_LAT);
-  let scale = 256 * pow(2, zoomLevel);
-  return createVector((m.x - c.x) * scale + cityX, (m.y - c.y) * scale + cityY);
+  let mapSize = 256 * pow(2, zoomLevel);
+  return createVector((m.x - c.x) * mapSize + cityX, (m.y - c.y) * mapSize + cityY);
 }
 
 // ---------- OSM tiles ----------
@@ -101,22 +160,22 @@ function getTile(z, x, y) {
 
 function drawBasemap() {
   let c = merc(CENTER_LON, CENTER_LAT);
-  let scale = 256 * pow(2, zoomLevel);
+  let mapSize = 256 * pow(2, zoomLevel);
   let zi = constrain(round(zoomLevel), 0, 18);
   let n = pow(2, zi);
-  let ts = scale / n;
+  let ts = mapSize / n;
 
-  let tx0 = floor(((0 - cityX) / scale + c.x) * n);
-  let tx1 = floor(((width - cityX) / scale + c.x) * n);
-  let ty0 = floor(((0 - cityY) / scale + c.y) * n);
-  let ty1 = floor(((height - cityY) / scale + c.y) * n);
+  let tx0 = floor(((0 - cityX) / mapSize + c.x) * n);
+  let tx1 = floor(((width - cityX) / mapSize + c.x) * n);
+  let ty0 = floor(((0 - cityY) / mapSize + c.y) * n);
+  let ty1 = floor(((height - cityY) / mapSize + c.y) * n);
 
   for (let ty = ty0; ty <= ty1; ty++) {
     for (let tx = tx0; tx <= tx1; tx++) {
       if (ty < 0 || ty >= n) continue;
       let wrappedX = ((tx % n) + n) % n;
-      let sx = (tx / n - c.x) * scale + cityX;
-      let sy = (ty / n - c.y) * scale + cityY;
+      let sx = (tx / n - c.x) * mapSize + cityX;
+      let sy = (ty / n - c.y) * mapSize + cityY;
       let t = getTile(zi, wrappedX, ty);
       if (t.ok) {
         image(t.img, sx, sy, ts + 1, ts + 1);
@@ -221,7 +280,7 @@ function drawSymbols() {
 function drawLegend() {
   noStroke();
   fill(255, 255, 255, 225);
-  rect(10, 10, 285, 92, 6);
+  rect(10, 10, 300, 108, 6);
   fill(30);
   textAlign(LEFT, TOP);
   textStyle(BOLD);
@@ -232,6 +291,7 @@ function drawLegend() {
   text("Orange circles: sample data (area proportional to value)", 20, 40);
   text("Teal dots: sample points; zoom out to cluster them", 20, 56);
   text("Drag = pan | Wheel = zoom | Arrows = move | R = reset", 20, 72);
+  text(boundaryStatus, 20, 92);
 
   fill(255, 255, 255, 200);
   rect(width - 190, height - 20, 190, 20);
@@ -258,6 +318,9 @@ function mouseWheel(event) {
 
 function keyPressed() {
   if (key === 'r' || key === 'R') { cityX = 400; cityY = 300; zoomLevel = 10.3; }
+  if (key === 'b' || key === 'B') {
+    console.log(JSON.stringify(boundary.map(p => [Number(p[0].toFixed(4)), Number(p[1].toFixed(4))])));
+  }
 }
 
 // ---------- Point-in-polygon ----------
